@@ -152,25 +152,32 @@ def findByVMName(VMName, user, password, host):
 
 def findByUUID(uuid, user, password, host):
     # form a connection...
-    si = connect.SmartConnect(host=host, user=user, pwd=password,
-                              port=443, sslContext=context)
+    try:
+        si = connect.SmartConnect(host=host, user=user, pwd=password,
+                                  port=443, sslContext=context)
 
-    # doing this means you don't need to remember to disconnect your script/objects
-    atexit.register(connect.Disconnect, si)
+        # doing this means you don't need to remember to disconnect your script/objects
+        atexit.register(connect.Disconnect, si)
 
-    # see:
-    # http://pubs.vmware.com/vsphere-55/topic/com.vmware.wssdk.apiref.doc/vim.ServiceInstanceContent.html
-    # http://pubs.vmware.com/vsphere-55/topic/com.vmware.wssdk.apiref.doc/vim.SearchIndex.html
-    search_index = si.content.searchIndex
-    vm = search_index.FindByUuid(None, uuid, True, True)
+        # see:
+        # http://pubs.vmware.com/vsphere-55/topic/com.vmware.wssdk.apiref.doc/vim.ServiceInstanceContent.html
+        # http://pubs.vmware.com/vsphere-55/topic/com.vmware.wssdk.apiref.doc/vim.SearchIndex.html
+        search_index = si.content.searchIndex
+        vm = search_index.FindByUuid(None, uuid, True, True)
 
-    if vm is None:
+        if vm is None:
+            return False
+
+        print(Fore.GREEN + "Found Virtual Machine using UUID")
+        print(Style.RESET_ALL)
+        details = processVmInformation(vm)
+        return details
+    except:
+        name = socket.gethostbyaddr(vcenter)
+        print Fore.RED + "Failed to Connect to %s (%s)" % (name[0], host)
+        print(Fore.RED + "make sure host is reachable from workstation")
+        print(Style.RESET_ALL)
         return False
-
-    print(Fore.GREEN + "Found Virtual Machine using UUID")
-    print(Style.RESET_ALL)
-    details = processVmInformation(vm)
-    return details
 
 ### main Application
 args = get_args()
