@@ -1,15 +1,18 @@
-from ldap3 import Server, Connection, ALL, NTLM, Tls, ALL_ATTRIBUTES, SUBTREE, SYNC,SIMPLE, SEARCH_SCOPE_WHOLE_SUBTREE
+from ldap3 import Server, Connection, ALL, NTLM, Tls, ALL_ATTRIBUTES, SUBTREE, SYNC, SIMPLE, SEARCH_SCOPE_WHOLE_SUBTREE
 import atexit
 import argparse
 import getpass
 import ssl
 
 from pyVim import connect
+
 import requests.packages.urllib3
 import socket
 import pprint
 from colorama import init
 from colorama import Fore, Back, Style
+
+from pudb import set_trace; set_trace()
 
 # Disabling SSL certificate verification
 context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
@@ -20,24 +23,26 @@ requests.packages.urllib3.disable_warnings()
 # Added hostnames to this list to be skipped, must match reverse dns lookups
 skip_vcenters = []
 
-### LDAP Settings
-### Adjust these for openldap servers, these are currently setup for windows active directory
-windowsDomainName = ''
+# LDAP Settings
+# Adjust these for openldap servers, these are currently setup for windows active directory
+windowsDomainName = 't3n'
 userNameAttribute = 'userPrincipalName'
-ldapHost = ''
+ldapHost = 't3n.dom'
 ldapPort = 636
 useSSL = True
-baseDN = ''
-### Adjust this based off your own org
-## Currently Set for Windows AD usage
-## filters based on the objects description
+baseDN = 'dc=t3n,dc=dom'
+# Adjust this based off your own org
+# Currently Set for Windows AD usage
+# filters based on the objects description
 searchFilter = "(&(objectCategory=computer)(description=*vcent*)(!(description=*vcenterdb:*))(!(userAccountControl:1.2.840.113556.1.4.803:=2)))"
+
 
 def datacenterIs(element):
     global datacenter
     if len(element) > 0:
         return element[:3] == datacenter
     return False
+
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -72,6 +77,7 @@ def get_args():
 
     return args
 
+
 def fetchVcenters(user, password, datacenter):
     # LDAP settings
     global ldapHost
@@ -83,17 +89,18 @@ def fetchVcenters(user, password, datacenter):
     bindUser = windowsDomainName + '\\' + user
     bindPassword = password
     # Search Filter to get vcenter servers
-    ldap_server = Server(host = ldapHost, port = ldapPort, use_ssl = useSSL)
-    ldap_conn = Connection(ldap_server, auto_bind = True, client_strategy = SYNC, user=bindUser, password=bindPassword, authentication=SIMPLE)
+    ldap_server = Server(host=ldapHost, port=ldapPort, use_ssl=useSSL)
+    ldap_conn = Connection(ldap_server, auto_bind=True, client_strategy=SYNC, user=bindUser, password=bindPassword,
+                           authentication=SIMPLE)
 
     ldap_conn.search(
-        search_base = baseDN,
-        search_scope = SEARCH_SCOPE_WHOLE_SUBTREE,
-        search_filter = searchFilter,
-        attributes = ['name']
+        search_base=baseDN,
+        search_scope=SEARCH_SCOPE_WHOLE_SUBTREE,
+        search_filter=searchFilter,
+        attributes=['name']
     )
     print("Fetching VCenter Server list from LDAP Please wait")
-    ## Process Ldap servers
+    # Process Ldap servers
     hosts = []
     if len(ldap_conn.response) > 1:
         for entry in ldap_conn.response:
@@ -109,30 +116,32 @@ def fetchVcenters(user, password, datacenter):
 
     return vcenters
 
+
 def processVmInformation(vm, vcenter):
-    ### This funcation pulls out the important information
+    # This funcation pulls out the important information
     print("building vm object")
     data = {'name': vm.summary.config.name,
-               'instance UUID': vm.summary.config.instanceUuid,
-               'vCenter': vcenter,
-               'guest OS name': vm.summary.config.guestFullName,
-               'ESX host': vm.runtime.host.name,
-               'IP Address': vm.summary.guest.ipAddress,
-               'Number of CPUs': vm.summary.config.numCpu,
-               'Memory (MB)': vm.summary.config.memorySizeMB,
-               'power state': vm.runtime.powerState,
-               'macAddress': vm.config.hardware.device[14].macAddress,
-               'datastore': vm.config.datastoreUrl[0].name,
-               'connectionState': vm.summary.runtime.connectionState
-               }
-    print vcenter
-    exit(1)
+            'instance UUID': vm.summary.config.instanceUuid,
+            'vCenter': vcenter,
+            'guest OS name': vm.summary.config.guestFullName,
+            'ESX host': vm.runtime.host.name,
+            'IP Address': vm.summary.guest.ipAddress,
+            'Number of CPUs': vm.summary.config.numCpu,
+            'Memory (MB)': vm.summary.config.memorySizeMB,
+            'power state': vm.runtime.powerState,
+            'macAddress': vm.config.hardware.device[14].macAddress,
+            'datastore': vm.config.datastoreUrl[0].name,
+            'connectionState': vm.summary.runtime.connectionState
+            }
+    print data
+   # exit(0)
     return data
+
 
 def findByVMName(VMName, user, password, host, vcenterName):
     try:
         si = connect.SmartConnect(host=host, user=user, pwd=password,
-                              port=443, sslContext=context)
+                                  port=443, sslContext=context)
         atexit.register(connect.Disconnect, si)
 
         search_index = si.content.searchIndex
@@ -142,14 +151,14 @@ def findByVMName(VMName, user, password, host, vcenterName):
             return False
 
         print vim.vm.device.VirtulEthernetCard
-        nics = [ x for x in vm.config.hardware.device if isinstance(x, nic)]
+        nics = [x for x in vm.config.hardware.device if isinstance(x, nic)]
         print nics
         exit(1)
 
         print(Fore.GREEN + "Found Virtual Machine using DNS Name")
         print(Style.RESET_ALL)
 
-        details = processVmInformation(vm,vcenterName)
+        details = processVmInformation(vm, vcenterName)
         return details
 
     except:
@@ -173,7 +182,7 @@ def findByUUID(uuid, user, password, host, vcenterName):
 
         print(Fore.GREEN + "Found Virtual Machine using UUID")
         print(Style.RESET_ALL)
-        details = processVmInformation(vm,vcenterName)
+        details = processVmInformation(vm, vcenterName)
         return details
     except:
         name = socket.gethostbyaddr(vcenter)
@@ -182,14 +191,17 @@ def findByUUID(uuid, user, password, host, vcenterName):
         print(Style.RESET_ALL)
         return False
 
+
 def getDcFromName(name):
     return name[:3]
 
-### main Application
+
+# main Application
 args = get_args()
 init()
-vmwareUser = windowsDomainName + '\\' + args.user
-
+vmwareUser = windowsDomainName + "\\" + args.user
+print vmwareUser
+exit(1);
 if args.name:
     vmname = args.name.upper()
     datacenter = getDcFromName(vmname)
@@ -210,16 +222,16 @@ for vcenter in vcenters:
     else:
         if args.name:
             results = findByVMName(vmname, vmwareUser, args.password, vcenter, vcenterName)
-
+            print results
         if args.uuid:
             results = findByUUID(args.uuid, vmwareUser, args.password, vcenter, vcenterName)
 
-        if results:
-            break
-        else:
+        if results == False:
             continue
+        else:
+            break
 
 print (Fore.CYAN + "VM DETAILS")
 print(Style.RESET_ALL)
 for name, value in results.items():
-        print("{0:{width}{base}}: {1}".format(name, value, width=25, base='s'))
+    print("{0:{width}{base}}: {1}".format(name, value, width=25, base='s'))
